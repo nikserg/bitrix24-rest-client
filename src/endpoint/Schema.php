@@ -53,7 +53,13 @@ class Schema
         ];
         if (isset($schema['scope']['crm'])) {
             $statusEntityTypes = $this->client->call('crm.status.entity.types');
-            $statusEntityTypes = array_combine(array_column($statusEntityTypes, "ID"), $statusEntityTypes);
+            
+            $statusEntityTypesColumn = array_column($statusEntityTypes, "ID");
+            if (count($statusEntityTypesColumn) != count($statusEntityTypes)) {
+                throw new \Exception("Не равное количество записей в массиве и колонке ID этого массива ".print_r($statusEntityTypes, true));
+            }
+            
+            $statusEntityTypes = array_combine($statusEntityTypesColumn, $statusEntityTypes);
             $statusList = $this->client->call('crm.status.list')['result'];
             foreach ($statusList as $status) {
                 $statusEntityTypes[$status['ENTITY_ID']]['items'] [] = $status;
