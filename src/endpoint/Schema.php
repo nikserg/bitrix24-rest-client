@@ -15,7 +15,6 @@ use bitrix\storage\Storage;
 /**
  * Provides schema aggregation and assertion for endpoints
  *
- * TODO: fields size quality validation?
  * TODO: convert schematic fields to their corresponding types to ease end-user surprise load
  *
  * @package bitrix\endpoint
@@ -53,20 +52,41 @@ class Schema
         ];
         if (isset($schema['scope']['crm'])) {
             $statusEntityTypes = $this->client->call('crm.status.entity.types');
-            
-            $statusEntityTypesColumn = array_column($statusEntityTypes, "ID");
-            if (count($statusEntityTypesColumn) != count($statusEntityTypes)) {
-                throw new \Exception("Не равное количество записей в массиве и колонке ID этого массива ".print_r($statusEntityTypes, true));
-            }
-            
-            $statusEntityTypes = array_combine($statusEntityTypesColumn, $statusEntityTypes);
+            $statusEntityTypes = array_combine(array_column($statusEntityTypes, "ID"), $statusEntityTypes);
             $statusList = $this->client->call('crm.status.list')['result'];
             foreach ($statusList as $status) {
                 $statusEntityTypes[$status['ENTITY_ID']]['items'] [] = $status;
             }
+            $productFields = $this->client->call('crm.product.fields');
+            $productFieldsMap = [];
+            foreach ($productFields as $key => $productField) {
+                if (preg_match("~^PROPERTY_\d+$~", $key)) {
+                    $productFieldsMap[$productField['title']] = $key;
+                } else {
+                    $productFieldsMap[$key] = $key;
+                }
+            }
             $schema['crm'] = [
                 'lead'       => [
                     'fields' => $this->client->call('crm.lead.fields'),
+                ],
+                'contact'    => [
+                    'fields' => $this->client->call('crm.contact.fields'),
+                ],
+                'deal'       => [
+                    'fields' => $this->client->call('crm.deal.fields'),
+                ],
+                'company'    => [
+                    'fields' => $this->client->call('crm.company.fields'),
+                ],
+                'address'    => [
+                    'fields' => $this->client->call('crm.address.fields'),
+                ],
+                'requisite'  => [
+                    'fields'     => $this->client->call('crm.requisite.fields'),
+                    'bankdetail' => [
+                        'fields' => $this->client->call('crm.requisite.bankdetail.fields'),
+                    ],
                 ],
                 'enum'       => [
                     'fields' => $this->client->call('crm.enum.fields'),
@@ -74,8 +94,18 @@ class Schema
                 'multifield' => [
                     'fields' => $this->client->call('crm.multifield.fields'),
                 ],
+                'product' => [
+                    'fields' => $productFields,
+                    'fieldsMap' => $productFieldsMap,
+                ],
                 'currency'   => [
                     'list' => $this->client->call('crm.currency.list')['result'],
+                ],
+                'timeline'   => [
+                    'comment' => [
+                        'entityTypes' => ['lead', 'deal', 'contact', 'company', 'order'],
+                        'fields'      => $this->client->call('crm.timeline.comment.fields'),
+                    ],
                 ],
                 'status'     => [
                     'fields' => $this->client->call('crm.status.fields'),
@@ -346,7 +376,7 @@ class Schema
             case 'bool':
                 return $value === true || $value === false;
             case 'char':
-                return $value === 'Y' || $value === 'N'; // TODO: find a way to resolve this dangerous assumption, there are other types of char fields
+                return $value === 'Y' || $value === 'N'; // TODO: find a GOOD way to resolve this dangerous assumption, there are other types of char fields
             case 'date': // TODO: determine all valid bitrix date formats, some of them are 'Y-m-d' and 'd.m.Y'; or choose a single one
             case 'datetime': // TODO: appears to conform with common SQL timestamp format, validate that
                 return (bool)strtotime($value);
@@ -365,6 +395,8 @@ class Schema
             case 'crm_currency':
                 return in_array($value, array_column($this->schema['crm']['currency']['list'], 'CURRENCY'));
             case 'unchecked':
+            case 'product_property':
+            case 'product_file':
                 return true;
         }
         throw new BitrixClientException("Encountered unknown type '{$schema['type']}' in a schema");
@@ -446,7 +478,7 @@ class Schema
     /**
      * @param array  $schema
      * @param string $field
-     * @param mixed $value
+     * @param mixed  $value
      * @throws BitrixException
      * @throws InputValidationException
      * @throws TransportException
@@ -502,7 +534,7 @@ class Schema
             } else {
                 $field = $filterField;
             }
-            $this->assertValidFilterFieldValue($schema,$field,$value);
+            $this->assertValidFilterFieldValue($schema, $field, $value);
         }
         self::assertValidFilterStart($filter->getStart());
     }
@@ -518,7 +550,7 @@ class Schema
     {
         $this->assertValidFilterOrder($schema, $filter->getOrder());
         foreach ($filter->getFilter() as $field => $value) {
-            $this->assertValidFilterFieldValue($schema,$field,$value);
+            $this->assertValidFilterFieldValue($schema, $field, $value);
         }
     }
 
@@ -553,7 +585,7 @@ class Schema
      * @param array             $listResponse
      * @throws NotFoundException
      */
-    function listResponseInbound(GenericListFilter $filter, array $listResponse)
+    function assertListResponseInbound(GenericListFilter $filter, array $listResponse)
     {
         if ($filter->getStart() > $listResponse['total']) {
             throw new NotFoundException("Filter reached out of list bounds");
@@ -563,6 +595,5 @@ class Schema
                 throw new NotFoundException("Filter reached out of list bounds");
             }
         }
-        // TODO: more checks??
     }
 }

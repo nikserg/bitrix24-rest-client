@@ -1,14 +1,13 @@
 <?php
 
 
-namespace bitrix\endpoint;
+namespace bitrix\endpoint\crm;
 
 
+use bitrix\endpoint\Schema;
 use bitrix\exception\BitrixClientException;
-use bitrix\exception\BitrixException;
 use bitrix\exception\BitrixServerException;
 use bitrix\exception\NotFoundException;
-use bitrix\exception\InputValidationException;
 use bitrix\exception\TransportException;
 
 /**
@@ -16,7 +15,7 @@ use bitrix\exception\TransportException;
  *
  * @package endpoint
  */
-abstract class CommonCrud
+abstract class CrmLinkCrud
 {
     /**
      * @var Schema
@@ -38,52 +37,33 @@ abstract class CommonCrud
 
     abstract function getScopeName(): string;
 
+    abstract function getForeignIdType(): string;
+
     abstract function getScopePath(): string;
 
     /**
-     * @param array $fields
-     * @return int
-     * @throws InputValidationException
-     * @throws BitrixException
-     * @throws TransportException
-     */
-    public function add(array $fields): int
-    {
-        $this->schema->assertValidFields($this->getScopeSettings()['fields'], $fields, false);
-        return $this->schema->client->call($this->getScopePath() . '.add', ['FIELDS' => $fields]);
-    }
-
-    /**
-     * @param int $id
-     * @return array | null
-     * @throws NotFoundException
+     * @param int       $id
+     * @param int       $foreignId
+     * @param int|null  $sort
+     * @param bool|null $is_primary
+     * @return bool
      * @throws BitrixClientException
      * @throws BitrixServerException
-     * @throws TransportException
-     */
-    public function get(int $id)
-    {
-        try {
-            return $this->schema->client->call($this->getScopePath() . '.get', ['ID' => $id]);
-        } catch (BitrixServerException $exception) {
-            throw $this->convertNotFoundException($exception);
-        }
-    }
-
-    /**
-     * @param int   $id
-     * @param array $fields
-     * @return bool
-     * @throws InputValidationException
      * @throws NotFoundException
-     * @throws BitrixException
      * @throws TransportException
      */
-    public function update(int $id, array $fields): bool
+    public function link(int $id, int $foreignId, int $sort = null, bool $is_primary = null): bool
     {
-        $this->schema->assertValidFields($this->getScopeSettings()['fields'], $fields, true);
         try {
-            return $this->schema->client->call($this->getScopePath() . '.update', ["ID" => $id, "FIELDS" => $fields]);
+            return $this->schema->client->call($this->getScopePath() . '.add',
+                [
+                    "ID"     => $id,
+                    "FIELDS" => [
+                        $this->getForeignIdType() => $foreignId,
+                        'IS_PRIMARY'              => $is_primary ? 'Y' : 'N',
+                        'SORT'                    => $sort,
+                    ],
+                ]);
         } catch (BitrixServerException $exception) {
             throw $this->convertNotFoundException($exception);
         }
@@ -91,16 +71,52 @@ abstract class CommonCrud
 
     /**
      * @param int $id
+     * @param int $foreignId
+     * @return bool
+     * @throws BitrixClientException
+     * @throws BitrixServerException
+     * @throws NotFoundException
+     * @throws TransportException
+     */
+    public function unlink(int $id, int $foreignId): bool
+    {
+        try {
+            return $this->schema->client->call($this->getScopePath() . '.delete',
+                ["ID" => $id, "FIELDS" => [$this->getForeignIdType() => $foreignId]]);
+        } catch (BitrixServerException $exception) {
+            throw $this->convertNotFoundException($exception);
+        }
+    }
+
+    /**
+     * @param int $id
+     * @return array
+     * @throws BitrixClientException
+     * @throws BitrixServerException
+     * @throws NotFoundException
+     * @throws TransportException
+     */
+    public function list(int $id): array
+    {
+        try {
+            return $this->schema->client->call($this->getScopePath() . '.items.get', ["ID" => $id]);
+        } catch (BitrixServerException $exception) {
+            throw $this->convertNotFoundException($exception);
+        }
+    }
+
+    /**
+     * @param int $id
      * @return bool
      * @throws NotFoundException
      * @throws BitrixClientException
      * @throws BitrixServerException
      * @throws TransportException
      */
-    public function delete(int $id): bool
+    public function clear(int $id): bool
     {
         try {
-            return $this->schema->client->call($this->getScopePath() . '.delete', ["ID" => $id]);
+            return $this->schema->client->call($this->getScopePath() . '.items.delete', ["ID" => $id]);
         } catch (BitrixServerException $exception) {
             throw $this->convertNotFoundException($exception);
         }

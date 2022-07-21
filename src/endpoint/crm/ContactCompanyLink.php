@@ -4,16 +4,15 @@
 namespace bitrix\endpoint\crm;
 
 
-use bitrix\endpoint\CrmCrud;
 use bitrix\exception\BitrixException;
 use bitrix\exception\TransportException;
 
 /**
- * Wraps related CRM CRUD methods
+ * Link companies to contacts
  *
  * @package endpoint
  */
-class Lead extends CrmCrud
+class ContactCompanyLink extends CrmLinkCrud
 {
     function getScopeName(): string
     {
@@ -22,7 +21,7 @@ class Lead extends CrmCrud
 
     function getScopePath(): string
     {
-        return 'crm.lead';
+        return 'crm.contact.company';
     }
 
     /**
@@ -32,6 +31,11 @@ class Lead extends CrmCrud
      */
     function getScopeSettings(): array
     {
-        return $this->schema->getSchema()['crm']['lead'];
+        return $this->schema->getSchema()['crm']['contact'];
+    }
+
+    function getForeignIdType(): string
+    {
+        return 'COMPANY_ID';
     }
 }

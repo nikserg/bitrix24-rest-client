@@ -1,22 +1,24 @@
 <?php
 
 
-namespace bitrix\endpoint;
+namespace bitrix\endpoint\crm;
 
 
+use bitrix\endpoint\GenericListFilter;
+use bitrix\endpoint\Schema;
 use bitrix\exception\BitrixClientException;
 use bitrix\exception\BitrixException;
 use bitrix\exception\BitrixServerException;
-use bitrix\exception\NotFoundException;
 use bitrix\exception\InputValidationException;
+use bitrix\exception\NotFoundException;
 use bitrix\exception\TransportException;
 
 /**
- * Wrapper for common CRUD methods
+ * Wraps related CRM CRUD methods
  *
  * @package endpoint
  */
-abstract class CommonCrud
+class Address
 {
     /**
      * @var Schema
@@ -28,17 +30,25 @@ abstract class CommonCrud
         $this->schema = $schema;
     }
 
+    function getScopeName(): string
+    {
+        return "crm";
+    }
+
+    function getScopePath(): string
+    {
+        return 'crm.address';
+    }
+
     /**
      * @return array
-     * @throws BitrixClientException
-     * @throws BitrixServerException
+     * @throws BitrixException
      * @throws TransportException
      */
-    abstract function getScopeSettings(): array;
-
-    abstract function getScopeName(): string;
-
-    abstract function getScopePath(): string;
+    function getScopeSettings(): array
+    {
+        return $this->schema->getSchema()['crm']['address'];
+    }
 
     /**
      * @param array $fields
@@ -54,53 +64,41 @@ abstract class CommonCrud
     }
 
     /**
-     * @param int $id
-     * @return array | null
-     * @throws NotFoundException
-     * @throws BitrixClientException
-     * @throws BitrixServerException
-     * @throws TransportException
-     */
-    public function get(int $id)
-    {
-        try {
-            return $this->schema->client->call($this->getScopePath() . '.get', ['ID' => $id]);
-        } catch (BitrixServerException $exception) {
-            throw $this->convertNotFoundException($exception);
-        }
-    }
-
-    /**
-     * @param int   $id
+     * NOTE: UNSET FIELDS WILL BE SAVED AS EMPTY!
+     *
      * @param array $fields
      * @return bool
+     * @throws BitrixClientException
+     * @throws BitrixException
+     * @throws BitrixServerException
      * @throws InputValidationException
      * @throws NotFoundException
-     * @throws BitrixException
      * @throws TransportException
      */
-    public function update(int $id, array $fields): bool
+    public function update(array $fields): bool
     {
         $this->schema->assertValidFields($this->getScopeSettings()['fields'], $fields, true);
         try {
-            return $this->schema->client->call($this->getScopePath() . '.update', ["ID" => $id, "FIELDS" => $fields]);
+            return $this->schema->client->call($this->getScopePath() . '.update', ["FIELDS" => $fields]);
         } catch (BitrixServerException $exception) {
             throw $this->convertNotFoundException($exception);
         }
     }
 
     /**
-     * @param int $id
+     * @param int $type
+     * @param int $entity
+     * @param int $entityType
      * @return bool
-     * @throws NotFoundException
      * @throws BitrixClientException
      * @throws BitrixServerException
+     * @throws NotFoundException
      * @throws TransportException
      */
-    public function delete(int $id): bool
+    public function delete(int $type, int $entity, int $entityType): bool
     {
         try {
-            return $this->schema->client->call($this->getScopePath() . '.delete', ["ID" => $id]);
+            return $this->schema->client->call($this->getScopePath() . '.delete', ["TYPE_ID" => $type,"ENTITY_ID" => $entity,"ENTITY_TYPE_ID" => $entityType]);
         } catch (BitrixServerException $exception) {
             throw $this->convertNotFoundException($exception);
         }
@@ -116,5 +114,21 @@ abstract class CommonCrud
             return new NotFoundException("Entity not found");
         }
         return $exception;
+    }
+
+    /**
+     * @param GenericListFilter $filter
+     * @return array
+     * @throws InputValidationException
+     * @throws BitrixException
+     * @throws TransportException
+     * @throws NotFoundException - when out of list bounds
+     */
+    public function list(GenericListFilter $filter): array
+    {
+        $this->schema->assertValidFilter($this->getScopeSettings()['fields'], $filter);
+        $list = $this->schema->client->call($this->getScopePath() . '.list', $filter->toFullMap());
+        $this->schema->assertListResponseInbound($filter, $list);
+        return $list;
     }
 }
